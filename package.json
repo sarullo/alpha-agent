@@ -1,0 +1,15 @@
+{
+  "name": "alpha-agent",
+  "version": "1.0.0",
+  "description": "Automated stock and bitcoin research agents",
+  "main": "agent.js",
+  "scripts": {
+    "stock": "node agent.js --now",
+    "btc": "node btc-agent.js --now"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "node-cron": "^3.0.0",
+    "nodemailer": "^6.0.0"
+  }
+}
