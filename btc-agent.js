@@ -1,4 +1,5 @@
-require("dotenv").config();
+// Load .env only if running locally (GitHub Actions provides env vars directly)
+try { require("dotenv").config(); } catch(e) {}
 const cron = require("node-cron");
 const nodemailer = require("nodemailer");
 
