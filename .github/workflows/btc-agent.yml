@@ -3,7 +3,7 @@ name: Bitcoin Agent — Weekly
 on:
   schedule:
     # Every Monday at 8am ET = 12pm UTC
-    - cron: '0 12 * * 1'
+    - cron: '0 12 * * *'
   workflow_dispatch: # allows manual trigger from GitHub UI
 
 jobs:
