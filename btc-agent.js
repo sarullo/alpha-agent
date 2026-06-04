@@ -28,7 +28,24 @@ async function fetchCurrentPrice() {
   return data.USD.last;
 }
 
-// ─── Compute indicators ───────────────────────────────────────────────────────
+// ─── Fetch Fear & Greed Index ─────────────────────────────────────────────────
+
+async function fetchFearGreed() {
+  const res = await fetch("https://api.alternative.me/fng/?limit=30");
+  const data = await res.json();
+  if (!data.data) return null;
+  const current = data.data[0];
+  const avg7d = data.data.slice(0, 7).reduce(function(a, b) { return a + parseInt(b.value); }, 0) / 7;
+  const avg30d = data.data.slice(0, 30).reduce(function(a, b) { return a + parseInt(b.value); }, 0) / 30;
+  return {
+    value: parseInt(current.value),
+    classification: current.value_classification,
+    avg7d: avg7d.toFixed(1),
+    avg30d: avg30d.toFixed(1),
+  };
+}
+
+
 
 function sma(values, period) {
   if (values.length < period) return null;
@@ -122,13 +139,26 @@ function computeIndicators(prices) {
 
 // ─── Analyze with Claude ──────────────────────────────────────────────────────
 
-async function analyzeBTC(ind) {
+async function analyzeBTC(ind, fg) {
   const fmt = function(n, decimals) {
     if (n === null || n === undefined) return "N/A";
     return parseFloat(n).toFixed(decimals !== undefined ? decimals : 2);
   };
   const fmtPrice = function(n) { return n ? "$" + Math.round(n).toLocaleString() : "N/A"; };
   const fmtPct = function(n) { return n !== null ? (n >= 0 ? "+" : "") + fmt(n, 1) + "%" : "N/A"; };
+
+  const fgSection = fg ? [
+    "",
+    "=== FEAR & GREED INDEX ===",
+    "Current: " + fg.value + "/100 — " + fg.classification,
+    "7-day average: " + fg.avg7d,
+    "30-day average: " + fg.avg30d,
+    "  < 20 = Extreme Fear (historically strong buy zone)",
+    "  20-40 = Fear (good accumulation zone)",
+    "  40-60 = Neutral",
+    "  60-80 = Greed (start reducing)",
+    "  > 80 = Extreme Greed (historically sell zone)",
+  ].join("\n") : "";
 
   const dataBlock = [
     "=== CURRENT PRICE ===",
@@ -142,15 +172,17 @@ async function analyzeBTC(ind) {
     "50 DMA:   " + fmtPrice(ind.sma50)   + " | price is " + (ind.currentPrice > ind.sma50   ? "ABOVE" : "BELOW"),
     "100 DMA:  " + fmtPrice(ind.sma100)  + " | price is " + (ind.currentPrice > ind.sma100  ? "ABOVE" : "BELOW"),
     "200 DMA:  " + fmtPrice(ind.sma200)  + " | price is " + (ind.currentPrice > ind.sma200  ? "ABOVE" : "BELOW"),
-    "200 WMA:  " + fmtPrice(ind.ma200w)  + " | price is " + (ind.currentPrice > ind.ma200w  ? "ABOVE" : "BELOW") + " (historically: below = generational buy)",
+    "200 WMA:  " + fmtPrice(ind.ma200w)  + " | price is " + (ind.currentPrice > ind.ma200w  ? "ABOVE" : "BELOW") + " (below = generational buy)",
     "350 DMA:  " + fmtPrice(ind.sma350),
     "1458 DMA: " + fmtPrice(ind.sma1458) + " | price/1458 SMA ratio: " + fmt(ind.priceVs1458, 2) + "x (>4x = euphoria, <1x = deep value)",
     "",
     "=== KEY INDICATORS ===",
     "Mayer Multiple (price/200DMA): " + fmt(ind.mayerMultiple, 2) + "x",
-    "  < 0.8 = historically great buy zone",
-    "  0.8-1.5 = fair value",
-    "  > 2.4 = historically overheated",
+    "  < 0.8 = deep value — historically best buy zone",
+    "  0.8-1.0 = good value — accumulate carefully",
+    "  1.0-1.5 = fair value — hold",
+    "  1.5-2.4 = elevated — reduce exposure",
+    "  > 2.4 = historically overheated — take profits",
     "",
     "Pi Cycle Top (111 DMA vs 350 DMA x2):",
     "  111 DMA: " + fmtPrice(ind.sma111),
@@ -160,42 +192,45 @@ async function analyzeBTC(ind) {
     "Price vs 1458 DMA: " + fmt(ind.priceVs1458, 2) + "x",
     "52-week high: " + fmtPrice(ind.high52w) + " (" + fmt(ind.pctFrom52wHigh, 1) + "% below)",
     "52-week low:  " + fmtPrice(ind.low52w)  + " (" + fmt(ind.pctFrom52wLow, 1) + "% above)",
+    fgSection,
     "",
     "=== HALVING CYCLE ===",
     "Last halving: April 19, 2024",
     "Days since halving: " + ind.daysSinceHalving + " days",
     "Days to next halving (~Apr 2028): " + ind.daysToNextHalving + " days",
     "Cycle progress: " + fmt(ind.cycleProgress * 100, 0) + "%",
-    "  Historically: months 12-24 post-halving = bull run peak zone",
-    "  Currently in month: " + Math.floor(ind.daysSinceHalving / 30),
+    "Current month post-halving: " + Math.floor(ind.daysSinceHalving / 30),
+    "  Months 1-6:   Accumulation phase — historically good entry",
+    "  Months 6-18:  Bull run building — hold and add on dips",
+    "  Months 18-24: Peak zone — start taking profits",
+    "  Months 24-36: Post-peak — reduce exposure, bear market likely",
+    "  Months 36-48: Bear bottom — best accumulation opportunity",
   ].join("\n");
 
   const prompt = "You are a Bitcoin analyst specializing in on-chain metrics and cycle analysis. Here is today's complete Bitcoin data:\n\n"
     + dataBlock + "\n\n"
-    + "Analyze this data and give a comprehensive assessment. Cover:\n"
-    + "1. CYCLE POSITION: Where are we in the 4-year halving cycle? What does history suggest happens next?\n"
-    + "2. KEY INDICATORS: What do the Mayer Multiple, 200 WMA, 1458 SMA, and Pi Cycle Top tell us?\n"
-    + "3. PRICE TARGETS: Based on cycle history and current indicators, what are realistic targets?\n"
-    + "4. TIMELINE: When is the best time to buy vs take profits based on cycle position?\n\n"
+    + "Analyze this data comprehensively. Consider ALL indicators together — not just one.\n\n"
     + "Respond in EXACTLY this format:\n\n"
-    + "Cycle: [where we are in the cycle and what it means]\n"
-    + "MayerMultiple: [interpretation of current Mayer Multiple]\n"
-    + "MA200Week: [interpretation — is this a buy zone or danger zone]\n"
-    + "PiCycle: [Pi Cycle Top status and what it means]\n"
-    + "SMA1458: [interpretation of price vs 1458 SMA ratio]\n"
-    + "BullTarget: $[realistic cycle top price target with rationale]\n"
-    + "SupportLevel: $[key support level if price drops]\n"
+    + "Cycle: [where we are in the 4-year cycle and what history says happens next]\n"
+    + "MayerMultiple: [interpretation with specific number]\n"
+    + "MA200Week: [interpretation — buy zone, danger zone, or neutral]\n"
+    + "PiCycle: [status and what it means]\n"
+    + "SMA1458: [interpretation of ratio]\n"
+    + "FearGreed: [interpretation of current reading and what it signals]\n"
+    + "BullTarget: $[realistic cycle top target if still in bull, or recovery target if bear]\n"
+    + "SupportLevel: $[key support if price drops]\n"
     + "SIGNAL: [STRONG BUY or BUY or HOLD or TAKE PROFITS or SELL]\n"
     + "Confidence: [HIGH or MEDIUM or LOW]\n"
-    + "Timeline: [when to buy more / when to start taking profits based on cycle]\n"
-    + "Summary: [3 sentences — cycle position, current signal, and actionable advice]\n\n"
-    + "Base your SIGNAL on:\n"
-    + "STRONG BUY: Mayer < 0.8, price below 200 WMA, early cycle (months 1-12 post-halving)\n"
-    + "BUY: Mayer 0.8-1.5, price above 200 WMA, months 12-24 post-halving with momentum\n"
-    + "HOLD: Mayer 1.5-2.4, mid-to-late cycle, price extended\n"
-    + "TAKE PROFITS: Mayer > 2.4, Pi Cycle Top triggered, late cycle (months 24-36)\n"
-    + "SELL: Pi Cycle Top triggered + Mayer > 3.0 + price far above 1458 SMA\n"
-    + "Never write N/A. Use specific numbers.";
+    + "Timeline: [specific advice — when to buy more, when to take profits]\n"
+    + "Summary: [3 sentences — cycle position, what indicators say collectively, actionable advice]\n\n"
+    + "SIGNAL criteria — use ALL indicators together:\n"
+    + "STRONG BUY: Mayer < 0.8 AND Fear&Greed < 20 AND price near/below 200 WMA\n"
+    + "BUY: Mayer < 1.0 AND Fear&Greed < 40 AND cycle months 1-20 AND Pi Cycle not triggered\n"
+    + "HOLD: Mayer 1.0-1.5 OR cycle months 20-30 with mixed signals\n"
+    + "TAKE PROFITS: Mayer > 1.5 AND cycle months 18+ AND Fear&Greed > 70\n"
+    + "SELL: Pi Cycle Top triggered OR Mayer > 2.4 OR Fear&Greed > 85\n"
+    + "Note: Extreme Fear (<20) at late cycle (month 26) = conflicting signal, use HOLD not BUY\n"
+    + "Never write N/A. Be specific about what the combination of indicators tells you.";
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -251,7 +286,7 @@ function signalBg(s) {
 
 // ─── Build email ──────────────────────────────────────────────────────────────
 
-function buildEmail(ind, analysis, date) {
+function buildEmail(ind, fg, analysis, date) {
   const fmt = function(n, d) { return (n !== null && n !== undefined) ? parseFloat(n).toFixed(d || 2) : "N/A"; };
   const fmtPrice = function(n) { return n ? "$" + Math.round(n).toLocaleString() : "N/A"; };
   const sig = signal(analysis);
@@ -270,7 +305,9 @@ function buildEmail(ind, analysis, date) {
     { label: "52W Low",       value: fmtPrice(ind.low52w) },
     { label: "30d Return",    value: (ind.return30d >= 0 ? "+" : "") + fmt(ind.return30d, 1) + "%" },
     { label: "1Y Return",     value: (ind.return365d >= 0 ? "+" : "") + fmt(ind.return365d, 1) + "%" },
-    { label: "Cycle Month",   value: "Month " + Math.floor(ind.daysSinceHalving / 30) + " post-halving" },
+    { label: "Fear & Greed",    value: fg ? fg.value + "/100 — " + fg.classification : "N/A" },
+    { label: "F&G 7d Avg",      value: fg ? fg.avg7d : "N/A" },
+    { label: "F&G 30d Avg",     value: fg ? fg.avg30d : "N/A" },
   ].map(function(item) {
     return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:12px">'
       + '<span style="color:#64748b">' + item.label + '</span>'
@@ -284,7 +321,7 @@ function buildEmail(ind, analysis, date) {
     ["200 Week MA",     field(analysis, "MA200Week")],
     ["Pi Cycle Top",    field(analysis, "PiCycle")],
     ["1458 SMA",        field(analysis, "SMA1458")],
-    ["Bull Target",     field(analysis, "BullTarget")],
+    ["Fear & Greed",    field(analysis, "FearGreed")],
     ["Support Level",   field(analysis, "SupportLevel")],
     ["Timeline",        field(analysis, "Timeline")],
   ].map(function(row) {
@@ -371,10 +408,14 @@ async function run() {
     console.log("1458 SMA: $" + (indicators.sma1458 ? Math.round(indicators.sma1458).toLocaleString() : "N/A"));
     console.log("Pi Cycle Top: " + (indicators.piCycleTop ? "TRIGGERED ⚠️" : "Not triggered"));
 
-    console.log("Analyzing with Claude...");
-    const analysis = await analyzeBTC(indicators);
+    console.log("Fetching Fear & Greed Index...");
+    const fg = await fetchFearGreed();
+    if (fg) console.log("Fear & Greed: " + fg.value + " (" + fg.classification + ")");
 
-    const html = buildEmail(indicators, analysis, date);
+    console.log("Analyzing with Claude...");
+    const analysis = await analyzeBTC(indicators, fg);
+
+    const html = buildEmail(indicators, fg, analysis, date);
     await sendEmail(html, date);
     console.log("Done!");
   } catch(err) {
