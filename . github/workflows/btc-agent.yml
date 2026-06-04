@@ -1,0 +1,29 @@
+name: Bitcoin Agent — Weekly
+
+on:
+  schedule:
+    # Every Monday at 8am ET = 12pm UTC
+    - cron: '0 12 * * 1'
+  workflow_dispatch: # allows manual trigger from GitHub UI
+
+jobs:
+  run-btc-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Bitcoin agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: node btc-agent.js --now
