@@ -310,9 +310,9 @@ function buildEmail(ind, fg, analysis, date) {
     { label: "F&G 7d Avg",      value: fg ? fg.avg7d : "N/A" },
     { label: "F&G 30d Avg",     value: fg ? fg.avg30d : "N/A" },
   ].map(function(item) {
-    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:12px">'
-      + '<span style="color:#64748b">' + item.label + '</span>'
-      + '<span style="font-weight:700;color:#0f172a">' + item.value + '</span>'
+    return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;font-size:13px">'
+      + '<span style="color:#374151;font-weight:500">' + item.label + '</span>'
+      + '<span style="font-weight:700;color:#111827">' + item.value + '</span>'
       + '</div>';
   }).join("");
 
@@ -326,47 +326,47 @@ function buildEmail(ind, fg, analysis, date) {
     ["Support Level",   field(analysis, "SupportLevel")],
     ["Timeline",        field(analysis, "Timeline")],
   ].map(function(row) {
-    return '<tr>'
-      + '<td style="padding:8px 12px;font-size:12px;color:#64748b;white-space:nowrap;vertical-align:top;width:130px"><strong>' + row[0] + '</strong></td>'
-      + '<td style="padding:8px 12px;font-size:12px;color:#334155;line-height:1.5">' + row[1] + '</td>'
+    return '<tr style="border-bottom:1px solid #e5e7eb">'
+      + '<td style="padding:10px 12px;font-size:12px;color:#374151;white-space:nowrap;vertical-align:top;width:140px;font-weight:600;background:#f9fafb">' + row[0] + '</td>'
+      + '<td style="padding:10px 12px;font-size:12px;color:#111827;line-height:1.6">' + row[1] + '</td>'
       + '</tr>';
   }).join("");
 
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
-    + '<body style="margin:0;padding:0;background:#0f0f0f;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
+    + '<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">'
     + '<div style="max-width:640px;margin:0 auto;padding:22px 14px">'
 
     // Header
-    + '<div style="background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);border-radius:14px;padding:28px;margin-bottom:16px;text-align:center;border:1px solid #f7931a30">'
-    + '<div style="font-size:10px;letter-spacing:4px;color:#f7931a80;text-transform:uppercase;margin-bottom:6px">Bitcoin Cycle Intelligence</div>'
-    + '<div style="font-size:32px;font-weight:900;color:#f7931a;letter-spacing:-1px">₿ BITCOIN AGENT</div>'
-    + '<div style="margin-top:6px;font-size:12px;color:#64748b">' + date + '</div>'
-    + '<div style="margin-top:16px;display:inline-block;background:' + col + ';color:#fff;padding:8px 24px;border-radius:30px;font-size:15px;font-weight:900;letter-spacing:2px">' + sig + '</div>'
-    + '<div style="margin-top:8px;font-size:11px;color:#475569">Confidence: ' + field(analysis, "Confidence") + '</div>'
+    + '<div style="background:linear-gradient(135deg,#1c1917,#292524);border-radius:14px;padding:28px;margin-bottom:16px;text-align:center">'
+    + '<div style="font-size:10px;letter-spacing:4px;color:#d97706;text-transform:uppercase;margin-bottom:6px">Bitcoin Cycle Intelligence</div>'
+    + '<div style="font-size:32px;font-weight:900;color:#f7931a;letter-spacing:-1px">&#8383; BITCOIN AGENT</div>'
+    + '<div style="margin-top:6px;font-size:12px;color:#a8a29e">' + date + '</div>'
+    + '<div style="margin-top:16px;display:inline-block;background:' + col + ';color:#ffffff;padding:8px 24px;border-radius:30px;font-size:15px;font-weight:900;letter-spacing:2px">' + sig + '</div>'
+    + '<div style="margin-top:8px;font-size:11px;color:#78716c">Confidence: ' + field(analysis, "Confidence") + '</div>'
     + '</div>'
 
     // Summary
-    + '<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:16px 20px;margin-bottom:16px;border-left:4px solid ' + col + '">'
-    + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#f7931a;margin-bottom:8px">Analysis</div>'
-    + '<div style="font-size:13px;color:#cbd5e1;line-height:1.7">' + field(analysis, "Summary") + '</div>'
+    + '<div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;margin-bottom:16px;border-left:4px solid ' + col + '">'
+    + '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#f7931a;margin-bottom:8px;font-weight:600">Analysis</div>'
+    + '<div style="font-size:13px;color:#374151;line-height:1.7">' + field(analysis, "Summary") + '</div>'
     + '</div>'
 
     // Indicators grid
-    + '<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:16px 20px;margin-bottom:16px">'
-    + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#f7931a;margin-bottom:12px">Key Metrics</div>'
+    + '<div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;margin-bottom:16px">'
+    + '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#f7931a;margin-bottom:12px;font-weight:600">Key Metrics</div>'
     + indicators
     + '</div>'
 
     // Indicator analysis table
-    + '<div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;overflow:hidden;margin-bottom:16px">'
-    + '<div style="padding:12px 20px;border-bottom:1px solid #2a2a2a">'
-    + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#f7931a">Indicator Breakdown</div>'
+    + '<div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:16px">'
+    + '<div style="padding:12px 20px;border-bottom:1px solid #e5e7eb;background:#f9fafb">'
+    + '<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#f7931a;font-weight:600">Indicator Breakdown</div>'
     + '</div>'
     + '<table style="width:100%;border-collapse:collapse">' + rows + '</table>'
     + '</div>'
 
     // Footer
-    + '<div style="text-align:center;padding:12px;font-size:10px;color:#374151;line-height:1.7">'
+    + '<div style="text-align:center;padding:12px;font-size:10px;color:#6b7280;line-height:1.7">'
     + 'Bitcoin cycle analysis for educational purposes only. Not financial advice.<br>'
     + 'Data: Blockchain.info · Analysis: Claude Sonnet · <strong style="color:#f7931a">Bitcoin Agent</strong>'
     + '</div></div></body></html>';
