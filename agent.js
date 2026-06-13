@@ -9,21 +9,21 @@ const ALPACA_KEY = process.env.ALPACA_KEY;
 const ALPACA_SECRET = process.env.ALPACA_SECRET;
 
 // Curated universe — liquid, well-known stocks across all sectors
-const UNIVERSE = [
-  // Mega-cap tech
-  "NVDA","AAPL","MSFT","GOOGL","META","AMZN","TSLA","AMD","AVGO","QCOM",
-  "INTC","MU","ADBE","CRM","ORCL","NOW","PLTR","SMCI","ARM","MRVL",
-  // Financials
-  "JPM","GS","BAC","MS","V","MA","PYPL","HOOD","COIN","SOFI",
-  // Healthcare
-  "LLY","UNH","JNJ","ABBV","PFE","MRNA","GILD","AMGN",
-  // Energy
-  "XOM","CVX","COP","SLB","OXY",
-  // Consumer / Retail
-  "NFLX","SBUX","NKE","TGT","WMT","HD","COST",
-  // Industrial / Other
-  "CAT","HON","BA","GE","F","GM","UBER","ABNB"
-];
+const UNIVERSE_BY_SECTOR = {
+  "Technology":  ["NVDA","AAPL","MSFT","GOOGL","META","AMZN","AMD","AVGO","QCOM","INTC","MU","ADBE","CRM","ORCL","NOW","PLTR","ARM","MRVL"],
+  "Financials":  ["JPM","GS","BAC","MS","V","MA","PYPL","COIN","SOFI"],
+  "Healthcare":  ["LLY","UNH","JNJ","ABBV","PFE","MRNA","GILD","AMGN"],
+  "Energy":      ["XOM","CVX","COP","SLB","OXY"],
+  "Consumer":    ["NFLX","SBUX","NKE","TGT","WMT","HD","COST","MCD"],
+  "Industrial":  ["CAT","HON","BA","GE","RTX","LMT"],
+  "EV/Auto":     ["TSLA","F","GM","RIVN"],
+};
+const UNIVERSE = Object.values(UNIVERSE_BY_SECTOR).flat();
+// Map ticker -> sector for later use
+const TICKER_SECTOR = {};
+Object.entries(UNIVERSE_BY_SECTOR).forEach(([sector, tickers]) => {
+  tickers.forEach(t => { TICKER_SECTOR[t] = sector; });
+});
 
 function sleep(ms) {
   return new Promise(function(r) { setTimeout(r, ms); });
@@ -86,7 +86,7 @@ function computeTechnicals(bars) {
   return { high52, low52, ma50, ma200 };
 }
 
-// ─── Score stock using only Alpaca data ───────────────────────────────────────
+// ─── Score stock for selection (entry timing only, not recommendation) ────────
 
 function scoreStock(snap, tech) {
   var score = 0;
@@ -101,51 +101,46 @@ function scoreStock(snap, tech) {
   var low       = snap.dailyBar.l;
   var open      = snap.dailyBar.o;
 
-  // 1. Momentum today (40 pts)
-  if (changePct > 20)      { score += 40; reasons.push("surged +" + changePct.toFixed(1) + "% today"); }
-  else if (changePct > 10) { score += 32; reasons.push("up +" + changePct.toFixed(1) + "% today"); }
-  else if (changePct > 5)  { score += 22; reasons.push("up +" + changePct.toFixed(1) + "% today"); }
-  else if (changePct > 2)  { score += 12; reasons.push("up +" + changePct.toFixed(1) + "% today"); }
-  else if (changePct > 0)  { score += 4; }
+  // 1. Notable price move today — used for selection, not recommendation (30 pts)
+  var absPct = Math.abs(changePct);
+  if (absPct > 10)     { score += 30; reasons.push((changePct > 0 ? "+" : "") + changePct.toFixed(1) + "% today"); }
+  else if (absPct > 5) { score += 20; reasons.push((changePct > 0 ? "+" : "") + changePct.toFixed(1) + "% today"); }
+  else if (absPct > 2) { score += 10; reasons.push((changePct > 0 ? "+" : "") + changePct.toFixed(1) + "% today"); }
+  else                 { score += 3; }
 
-  // 2. Price vs VWAP (15 pts) — above VWAP = buyers in control all day
-  if (price > vwap)        { score += 15; reasons.push("above VWAP $" + vwap.toFixed(2)); }
+  // 2. Volume (30 pts) — high volume = significant event worth analyzing
+  if (volume > 50000000)      { score += 30; reasons.push("massive volume " + (volume/1e6).toFixed(0) + "M"); }
+  else if (volume > 10000000) { score += 22; reasons.push("high volume " + (volume/1e6).toFixed(0) + "M"); }
+  else if (volume > 2000000)  { score += 12; reasons.push("volume " + (volume/1e6).toFixed(1) + "M"); }
+  else if (volume > 500000)   { score += 5; }
 
-  // 3. Intraday strength — close near high of day (20 pts)
+  // 3. Price vs VWAP (20 pts) — intraday conviction
+  if (price > vwap)    { score += 20; reasons.push("above VWAP $" + vwap.toFixed(2)); }
+  else                 { score += 5; }
+
+  // 4. Intraday range position (20 pts)
   var dayRange = high - low;
   if (dayRange > 0) {
-    var closePosition = (price - low) / dayRange; // 1.0 = closed at high, 0 = at low
-    if (closePosition > 0.8)      { score += 20; reasons.push("closing near day high"); }
-    else if (closePosition > 0.6) { score += 12; reasons.push("strong close"); }
-    else if (closePosition > 0.4) { score += 5; }
+    var closePosition = (price - low) / dayRange;
+    if (closePosition > 0.7)      { score += 20; reasons.push("closed near day high"); }
+    else if (closePosition > 0.4) { score += 10; }
+    else                          { score += 2; reasons.push("closed near day low"); }
   }
 
-  // 4. Gap up from open (10 pts) — strong open = gap up catalyst
-  var gapPct = ((open - prevClose) / prevClose) * 100;
-  if (gapPct > 10)      { score += 10; reasons.push("gapped up +" + gapPct.toFixed(1) + "%"); }
-  else if (gapPct > 5)  { score += 7; reasons.push("gapped up +" + gapPct.toFixed(1) + "%"); }
-  else if (gapPct > 2)  { score += 4; }
-
-  // 5. Volume (15 pts)
-  if (volume > 50000000)      { score += 15; reasons.push("massive volume " + (volume/1e6).toFixed(0) + "M"); }
-  else if (volume > 10000000) { score += 10; reasons.push("high volume " + (volume/1e6).toFixed(0) + "M"); }
-  else if (volume > 2000000)  { score += 6; reasons.push("volume " + (volume/1e6).toFixed(1) + "M"); }
-  else if (volume > 500000)   { score += 3; }
-
-  // 6. Price sanity — avoid sub-$10 stocks with crazy % moves (likely pumps)
-  if (price < 10 && changePct > 30) { score = Math.min(score, 25); }
+  // Avoid sub-$5 stocks (likely micro-cap pumps)
+  if (price < 5) { score = Math.min(score, 20); }
 
   return { score: Math.min(score, 100), reasons };
 }
 
-// ─── Pick top 5 stocks ────────────────────────────────────────────────────────
+// ─── Pick top stocks with sector diversification ──────────────────────────────
 
 async function pickStocks() {
   console.log("Fetching snapshots for " + UNIVERSE.length + " stocks...");
   const snaps = await fetchSnapshots(UNIVERSE);
   console.log("Got " + Object.keys(snaps).length + " snapshots");
 
-  // Score each stock
+  // Score every stock regardless of direction
   const scored = [];
   const tickers = Object.keys(snaps);
 
@@ -155,14 +150,13 @@ async function pickStocks() {
     if (!snap || !snap.dailyBar || !snap.prevDailyBar || snap.dailyBar.c < 5) continue;
 
     var changePct = ((snap.dailyBar.c - snap.prevDailyBar.c) / snap.prevDailyBar.c) * 100;
-    if (changePct <= 0) continue; // only upward momentum
-
     var result = scoreStock(snap, null);
 
-    console.log("  " + ticker + " score:" + result.score + " +" + changePct.toFixed(2) + "% | " + result.reasons.slice(0,3).join(", "));
+    console.log("  " + ticker + " [" + (TICKER_SECTOR[ticker] || "?") + "] score:" + result.score + " " + (changePct >= 0 ? "+" : "") + changePct.toFixed(2) + "%");
 
     scored.push({
       ticker, snap, news: [],
+      sector: TICKER_SECTOR[ticker] || "Other",
       score: result.score,
       reasons: result.reasons,
       price: snap.dailyBar.c,
@@ -171,40 +165,41 @@ async function pickStocks() {
     });
   }
 
-  // Fetch news for all scored stocks, filter to those with news today
-  console.log("Fetching news for " + scored.length + " stocks...");
-  for (var n = 0; n < scored.length; n++) {
+  // Sort all by score desc
+  scored.sort(function(a, b) { return b.score - a.score; });
+
+  // Pick best from each sector (max 1 per sector), up to 7 total
+  var selected = [];
+  var usedSectors = {};
+  for (var j = 0; j < scored.length && selected.length < 7; j++) {
+    var s = scored[j];
+    if (!usedSectors[s.sector]) {
+      usedSectors[s.sector] = true;
+      selected.push(s);
+    }
+  }
+  // Fill remaining slots up to 5 with highest-scoring remaining stocks
+  for (var k = 0; k < scored.length && selected.length < 5; k++) {
+    if (selected.indexOf(scored[k]) === -1) selected.push(scored[k]);
+  }
+  if (selected.length > 5) selected = selected.slice(0, 5);
+
+  // Fetch news for selected stocks
+  console.log("Fetching news for " + selected.length + " stocks...");
+  for (var n = 0; n < selected.length; n++) {
     try {
-      scored[n].news = await fetchNews(scored[n].ticker);
+      selected[n].news = await fetchNews(selected[n].ticker);
     } catch(e) {
-      scored[n].news = [];
+      selected[n].news = [];
     }
     await sleep(100);
   }
 
-  // Separate into stocks with news vs without
-  const withNews    = scored.filter(function(s) { return s.news && s.news.length > 0; });
-  const withoutNews = scored.filter(function(s) { return !s.news || s.news.length === 0; });
-
-  // Sort each group by score desc, price desc
-  function sortStocks(arr) {
-    arr.sort(function(a, b) {
-      if (b.score !== a.score) return b.score - a.score;
-      return b.price - a.price;
-    });
-  }
-  sortStocks(withNews);
-  sortStocks(withoutNews);
-
-  // Pick top 5 — prefer stocks with news, fill with no-news only if needed
-  var pool = withNews.concat(withoutNews);
-  var top5 = pool.slice(0, 5);
-
-  console.log("\nSelected: " + top5.map(function(s) {
-    return s.ticker + "(score:" + s.score + " +" + s.changePct.toFixed(1) + "% news:" + (s.news.length > 0 ? "yes" : "no") + ")";
+  console.log("\nSelected: " + selected.map(function(s) {
+    return s.ticker + "[" + s.sector + "](score:" + s.score + " " + (s.changePct >= 0 ? "+" : "") + s.changePct.toFixed(1) + "%)";
   }).join(" | "));
 
-  return top5;
+  return selected;
 }
 
 // ─── Analyze with Claude (Sonnet) ─────────────────────────────────────────────
@@ -238,27 +233,29 @@ async function analyzeStock(s) {
     newsLines,
   ].join("\n");
 
-  var prompt = "You are analyzing " + s.ticker + " as a professional equity analyst. Here is today's data including news:\n\n"
+  var prompt = "You are a fundamental equity analyst evaluating " + s.ticker + " (" + (s.sector || "unknown sector") + ") for a 6-12 month investment horizon. Here is today's market data and news:\n\n"
     + lines + "\n\n"
-    + "Based on this data:\n"
-    + "1. What is the PRIMARY catalyst? Check news for: earnings beats, analyst upgrades/downgrades, price target changes, product launches, partnerships, FDA approvals, macro events.\n"
-    + "2. If you see an analyst upgrade/downgrade in the news, call out the firm name, new rating, and price target explicitly.\n"
-    + "3. Is this a real fundamental catalyst or speculation/pump?\n"
-    + "4. What is a realistic 12-month target and good entry price?\n\n"
+    + "Your job is to assess the LONG-TERM investment thesis, not just today's price move. Today's data is context for entry timing, not the primary signal.\n\n"
+    + "Consider:\n"
+    + "1. What is the business quality, competitive moat, and growth trajectory of this company?\n"
+    + "2. Does today's news (if any) change the long-term thesis, or is it just short-term noise?\n"
+    + "3. Is the stock attractively valued for a 6-12 month hold, or is it overextended?\n"
+    + "4. Would you still hold this position if it dropped 10% next week?\n\n"
     + "Respond in EXACTLY this format:\n\n"
-    + "Catalyst: [what is actually driving the move today, from the news]\n"
-    + "Bull: [specific bull case using actual numbers and news catalyst]\n"
-    + "Bear: [specific risk using actual numbers]\n"
+    + "Catalyst: [today's news/event if any, or 'No major catalyst — routine day']\n"
+    + "Bull: [long-term bull case — business quality, growth drivers, competitive advantages]\n"
+    + "Bear: [long-term bear risks — valuation, competition, execution risk, macro]\n"
     + "RECOMMENDATION: [BUY or HOLD or SELL]\n"
     + "Confidence: [HIGH or MEDIUM or LOW]\n"
-    + "Target: $[12-month price estimate]\n"
-    + "Entry: [current $X or wait for dip to $X]\n"
-    + "Summary: [2 sentences on catalyst and recommendation]\n\n"
-    + "BUY if: score 40+, above VWAP, closed near day high. A stock up 5%+ with news is almost always a BUY.\n"
-    + "HOLD if: score below 40, or stock is up less than 2% with no clear catalyst.\n"
-    + "SELL if: below VWAP with no catalyst and score below 25.\n"
-    + "Important: these stocks were pre-selected because they are moving today. Default to BUY for strong movers with news. Only say HOLD if you have a specific reason not to buy.\n"
-    + "Never write N/A. Use actual numbers and reference the news.";
+    + "Target: $[realistic 12-month price target based on fundamentals, not momentum]\n"
+    + "Entry: [buy now / wait for dip to $X-Y / avoid at current valuation]\n"
+    + "Summary: [2 sentences: long-term thesis and why this is or isn't a good entry point]\n\n"
+    + "RECOMMENDATION criteria (use fundamentals, not daily momentum):\n"
+    + "BUY: Strong business, reasonable valuation, clear growth catalyst, good risk/reward for 6-12 months\n"
+    + "HOLD: Good business but fairly valued, or good value but uncertain near-term catalysts\n"
+    + "SELL: Deteriorating fundamentals, overvalued relative to growth, or better alternatives exist\n"
+    + "Important: A stock being up or down today should NOT change a BUY to HOLD or HOLD to SELL. Base signals on fundamentals and 6-12 month outlook.\n"
+    + "Never write N/A. Always give a specific, reasoned answer.";
 
   var res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -270,7 +267,7 @@ async function analyzeStock(s) {
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 600,
-      system: "You are an aggressive growth-oriented equity analyst. These stocks have been pre-screened as today's top movers from a curated list of quality companies. Your job is to identify BUY opportunities. A stock up 5%+ on real news with strong intraday action is a BUY — say so clearly. Only say HOLD when signals are genuinely mixed. Only say SELL when there is a clear negative catalyst. Do not be overly cautious — these are quality companies moving for real reasons.",
+      system: "You are a fundamental equity analyst focused on 6-12 month investment horizons. You evaluate businesses on their long-term quality, growth trajectory, competitive position, and valuation — not daily price action. Your recommendations should be stable: a stock rated BUY today should still be BUY tomorrow unless the fundamental thesis changes. Daily price moves are entry timing context, never the primary signal. You cover all sectors equally — a well-valued healthcare or industrial company is as interesting as a tech stock.",
       messages: [{ role: "user", content: prompt }],
     })
   });
@@ -393,7 +390,7 @@ function buildEmail(results, date) {
     + '<div style="font-size:10px;letter-spacing:3px;color:#475569;text-transform:uppercase;margin-bottom:4px">Daily Market Intelligence</div>'
     + '<div style="font-size:27px;font-weight:900;color:#fff;letter-spacing:-0.5px">ALPHA AGENT</div>'
     + '<div style="margin-top:4px;font-size:12px;color:#94a3b8">' + date + '</div>'
-    + '<div style="margin-top:3px;font-size:10px;color:#475569">Top 5 gainers · Scored on momentum, volume, MAs, 52-week position · Data: Alpaca</div>'
+    + '<div style="margin-top:3px;font-size:10px;color:#475569">Top picks across all sectors · Fundamental 6-12 month outlook · Data: Alpaca</div>'
     + '</div>'
 
     + '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:11px;padding:14px 20px;margin-bottom:16px">'
@@ -404,7 +401,7 @@ function buildEmail(results, date) {
     + '<div style="width:1px;background:#e2e8f0"></div>'
     + '<div><div style="font-size:26px;font-weight:900;color:#dc2626">' + sells + '</div><div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px">Sell</div></div>'
     + '</div>'
-    + '<div style="font-size:10px;color:#94a3b8;text-align:center">Scoring: momentum + volume + moving averages + 52-week position</div>'
+    + '<div style="font-size:10px;color:#94a3b8;text-align:center">One pick per sector · Fundamental long-term thesis · Daily data used for entry timing only</div>'
     + '</div>'
 
     + cards
