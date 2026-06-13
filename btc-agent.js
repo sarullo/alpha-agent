@@ -13,9 +13,17 @@ function sleep(ms) {
 
 // ─── Fetch BTC price history from Blockchain.info ─────────────────────────────
 
+function fetchWithTimeout(url, options, ms) {
+  ms = ms || 30000;
+  const ctrl = new AbortController();
+  const timer = setTimeout(function() { ctrl.abort(); }, ms);
+  return fetch(url, Object.assign({}, options, { signal: ctrl.signal }))
+    .finally(function() { clearTimeout(timer); });
+}
+
 async function fetchPriceHistory(timespan) {
   const url = "https://api.blockchain.info/charts/market-price?timespan=" + timespan + "&format=json&sampled=false";
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, {}, 60000); // 60s — large dataset
   const data = await res.json();
   if (!data.values) throw new Error("No price data returned");
   return data.values; // [{x: timestamp, y: price}]
@@ -24,7 +32,7 @@ async function fetchPriceHistory(timespan) {
 // ─── Fetch current BTC price ──────────────────────────────────────────────────
 
 async function fetchCurrentPrice() {
-  const res = await fetch("https://api.blockchain.info/ticker");
+  const res = await fetchWithTimeout("https://api.blockchain.info/ticker", {}, 15000);
   const data = await res.json();
   return data.USD.last;
 }
@@ -32,7 +40,7 @@ async function fetchCurrentPrice() {
 // ─── Fetch Fear & Greed Index ─────────────────────────────────────────────────
 
 async function fetchFearGreed() {
-  const res = await fetch("https://api.alternative.me/fng/?limit=30");
+  const res = await fetchWithTimeout("https://api.alternative.me/fng/?limit=30", {}, 15000);
   const data = await res.json();
   if (!data.data) return null;
   const current = data.data[0];
@@ -233,7 +241,7 @@ async function analyzeBTC(ind, fg) {
     + "Note: Extreme Fear (<20) at late cycle (month 26) = conflicting signal, use HOLD not BUY\n"
     + "Never write N/A. Be specific about what the combination of indicators tells you.";
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -246,7 +254,7 @@ async function analyzeBTC(ind, fg) {
       system: "You are a Bitcoin cycle analyst with deep expertise in on-chain metrics, halving cycles, and technical indicators specific to Bitcoin. You understand the Mayer Multiple, Pi Cycle Top, 200 Week MA, and 1458 SMA indicators deeply. Give clear, specific, actionable analysis based on where we are in the 4-year cycle.",
       messages: [{ role: "user", content: prompt }],
     })
-  });
+  }, 60000);
 
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
