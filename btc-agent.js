@@ -241,7 +241,7 @@ async function analyzeBTC(ind, fg) {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 1000,
       system: "You are a Bitcoin cycle analyst with deep expertise in on-chain metrics, halving cycles, and technical indicators specific to Bitcoin. You understand the Mayer Multiple, Pi Cycle Top, 200 Week MA, and 1458 SMA indicators deeply. Give clear, specific, actionable analysis based on where we are in the 4-year cycle.",
       messages: [{ role: "user", content: prompt }],
@@ -310,10 +310,11 @@ function buildEmail(ind, fg, analysis, date) {
     { label: "F&G 7d Avg",      value: fg ? fg.avg7d : "N/A" },
     { label: "F&G 30d Avg",     value: fg ? fg.avg30d : "N/A" },
   ].map(function(item) {
-    return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;font-size:13px">'
-      + '<span style="color:#374151;font-weight:500">' + item.label + '</span>'
-      + '<span style="font-weight:700;color:#111827">' + item.value + '</span>'
-      + '</div>';
+    return '<table style="width:100%;border-collapse:collapse;border-bottom:1px solid #e5e7eb">'
+      + '<tr>'
+      + '<td style="padding:8px 0;font-size:13px;color:#374151;font-weight:500;width:55%">' + item.label + '</td>'
+      + '<td style="padding:8px 0;font-size:13px;font-weight:700;color:#111827;text-align:right">' + item.value + '</td>'
+      + '</tr></table>';
   }).join("");
 
   const rows = [
