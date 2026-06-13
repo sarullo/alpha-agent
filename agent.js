@@ -250,12 +250,13 @@ async function analyzeStock(s) {
     + "Target: $[realistic 12-month price target based on fundamentals, not momentum]\n"
     + "Entry: [buy now / wait for dip to $X-Y / avoid at current valuation]\n"
     + "Summary: [2 sentences: long-term thesis and why this is or isn't a good entry point]\n\n"
-    + "RECOMMENDATION criteria (use fundamentals, not daily momentum):\n"
-    + "BUY: Strong business, reasonable valuation, clear growth catalyst, good risk/reward for 6-12 months\n"
-    + "HOLD: Good business but fairly valued, or good value but uncertain near-term catalysts\n"
-    + "SELL: Deteriorating fundamentals, overvalued relative to growth, or better alternatives exist\n"
-    + "Important: A stock being up or down today should NOT change a BUY to HOLD or HOLD to SELL. Base signals on fundamentals and 6-12 month outlook.\n"
-    + "Never write N/A. Always give a specific, reasoned answer.";
+    + "RECOMMENDATION criteria:\n"
+    + "BUY: Strong or improving business, not obviously overvalued, catalyst or momentum supports entry — this should be your default for quality companies\n"
+    + "HOLD: Business is solid but valuation is stretched OR near-term headwinds outweigh the long-term case\n"
+    + "SELL: Fundamental thesis is broken, valuation is extreme (e.g. 100x+ P/E with slowing growth), or serious red flag in the news\n"
+    + "Use your knowledge of the company — ARM designs chips for AI/mobile, JPM is the leading US bank, WMT has dominant retail/e-commerce, UNH leads managed care, RIVN is an EV startup.\n"
+    + "A move today on real news is a positive signal for entry. If the business is strong and the stock is moving on good news, that is a BUY.\n"
+    + "Never write N/A. Be decisive.";
 
   var res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -265,9 +266,9 @@ async function analyzeStock(s) {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 600,
-      system: "You are a fundamental equity analyst focused on 6-12 month investment horizons. You evaluate businesses on their long-term quality, growth trajectory, competitive position, and valuation — not daily price action. Your recommendations should be stable: a stock rated BUY today should still be BUY tomorrow unless the fundamental thesis changes. Daily price moves are entry timing context, never the primary signal. You cover all sectors equally — a well-valued healthcare or industrial company is as interesting as a tech stock.",
+      system: "You are a fundamental equity analyst. Use your knowledge of each company's business model, competitive position, growth trajectory, and typical valuation to inform your recommendation — combined with today's market data and news. Your default for high-quality businesses at reasonable valuations should be BUY. HOLD means you genuinely cannot recommend buying right now. SELL means the thesis is broken or valuation is extreme. Do not default to HOLD out of caution — make a decisive call.",
       messages: [{ role: "user", content: prompt }],
     })
   });
