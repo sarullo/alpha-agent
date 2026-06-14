@@ -219,7 +219,7 @@ async function analyzeBTC(ind, fg) {
   const prompt = "You are a Bitcoin analyst specializing in on-chain metrics and cycle analysis. Here is today's complete Bitcoin data:\n\n"
     + dataBlock + "\n\n"
     + "Analyze this data comprehensively. Consider ALL indicators together — not just one.\n\n"
-    + "Respond in EXACTLY this format:\n\n"
+    + "Respond in EXACTLY this format (no markdown, no bold, no headers, no asterisks — plain text only):\n\n"
     + "Cycle: [where we are in the 4-year cycle and what history says happens next]\n"
     + "MayerMultiple: [interpretation with specific number]\n"
     + "MA200Week: [interpretation — buy zone, danger zone, or neutral]\n"
@@ -258,14 +258,17 @@ async function analyzeBTC(ind, fg) {
 
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
-  return (data.content.find(function(b) { return b.type === "text"; }) || {}).text || "";
+  const text = (data.content.find(function(b) { return b.type === "text"; }) || {}).text || "";
+  console.log("\n── Claude raw response ──\n" + text + "\n────────────────────────\n");
+  return text;
 }
 
 // ─── Parse fields ─────────────────────────────────────────────────────────────
 
 function field(text, name) {
-  const m = text.match(new RegExp("^" + name + "\\s*:\\s*(.+)$", "im"));
-  return m ? m[1].trim().replace(/\*\*/g, "") : "—";
+  // Handle markdown formatting: **Name**, ## Name, leading/trailing asterisks or hashes
+  const m = text.match(new RegExp("^[*#\\s]*" + name + "[*#\\s]*:\\s*(.+)$", "im"));
+  return m ? m[1].trim().replace(/\*\*/g, "").replace(/^#+\s*/, "") : "—";
 }
 
 function signal(text) {
