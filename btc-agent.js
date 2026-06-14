@@ -86,8 +86,10 @@ function computeIndicators(prices) {
   const sma350x2 = sma350 ? sma350 * 2 : null;
   const piCycleTop = sma111 && sma350x2 ? sma111 >= sma350x2 * 0.98 : false; // within 2% = danger zone
 
-  // Mayer Multiple: price / 200 DMA
+  // Mayer Multiple: price / 200 DMA (spot and 7-day smoothed to avoid threshold flip-flopping)
   const mayerMultiple = sma200 ? now / sma200 : null;
+  const price7dAvg = sma(closes, 7);
+  const mayerMultiple7d = (sma200 && price7dAvg) ? price7dAvg / sma200 : null;
 
   // 52-week high/low
   const last365 = closes.slice(-365);
@@ -136,6 +138,7 @@ function computeIndicators(prices) {
     sma111, sma350x2,
     piCycleTop,
     mayerMultiple,
+    mayerMultiple7d,
     mvrvProxy,
     priceVs1458,
     high52w, low52w,
@@ -186,7 +189,8 @@ async function analyzeBTC(ind, fg) {
     "1458 DMA: " + fmtPrice(ind.sma1458) + " | price/1458 SMA ratio: " + fmt(ind.priceVs1458, 2) + "x (>4x = euphoria, <1x = deep value)",
     "",
     "=== KEY INDICATORS ===",
-    "Mayer Multiple (price/200DMA): " + fmt(ind.mayerMultiple, 2) + "x",
+    "Mayer Multiple today (price/200DMA): " + fmt(ind.mayerMultiple, 2) + "x",
+    "Mayer Multiple 7-day avg: " + fmt(ind.mayerMultiple7d, 2) + "x  ← use this for SIGNAL to avoid day-to-day noise",
     "  < 0.8 = deep value — historically best buy zone",
     "  0.8-1.0 = good value — accumulate carefully",
     "  1.0-1.5 = fair value — hold",
@@ -232,13 +236,14 @@ async function analyzeBTC(ind, fg) {
     + "Confidence: [HIGH or MEDIUM or LOW]\n"
     + "Timeline: [specific advice — when to buy more, when to take profits]\n"
     + "Summary: [3 sentences — cycle position, what indicators say collectively, actionable advice]\n\n"
-    + "SIGNAL criteria — use ALL indicators together:\n"
-    + "STRONG BUY: Mayer < 0.8 AND Fear&Greed < 20 AND price near/below 200 WMA\n"
-    + "BUY: Mayer < 1.0 AND Fear&Greed < 40 AND cycle months 1-20 AND Pi Cycle not triggered\n"
-    + "HOLD: Mayer 1.0-1.5 OR cycle months 20-30 with mixed signals\n"
-    + "TAKE PROFITS: Mayer > 1.5 AND cycle months 18+ AND Fear&Greed > 70\n"
-    + "SELL: Pi Cycle Top triggered OR Mayer > 2.4 OR Fear&Greed > 85\n"
-    + "Note: Extreme Fear (<20) at late cycle (month 26) = conflicting signal, use HOLD not BUY\n"
+    + "SIGNAL criteria — base SIGNAL on the 7-day avg Mayer Multiple (not today's spot) to avoid daily noise:\n"
+    + "STRONG BUY: Mayer 7d avg < 0.8 AND Fear&Greed < 25 AND price near/below 200 WMA\n"
+    + "BUY: Mayer 7d avg < 1.0 AND Fear&Greed < 45 AND cycle months 1-20 AND Pi Cycle not triggered\n"
+    + "HOLD: Mayer 7d avg 0.8-1.2 with conflicting signals (late cycle, mixed F&G, etc.)\n"
+    + "TAKE PROFITS: Mayer 7d avg > 1.5 AND cycle months 18+ AND Fear&Greed > 70\n"
+    + "SELL: Pi Cycle Top triggered OR Mayer 7d avg > 2.4 OR Fear&Greed > 85\n"
+    + "Note: Extreme Fear at late cycle (month 24+) is a conflicting signal — prefer HOLD over BUY unless price is at or below 200 WMA.\n"
+    + "The signal should be STABLE week-to-week. Only change it when the underlying trend changes, not because of a 2-3% daily price move.\n"
     + "Never write N/A. Be specific about what the combination of indicators tells you.";
 
   const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
@@ -307,7 +312,8 @@ function buildEmail(ind, fg, analysis, date) {
 
   const indicators = [
     { label: "Price",         value: fmtPrice(ind.currentPrice) },
-    { label: "Mayer Multiple",value: fmt(ind.mayerMultiple) + "x" },
+    { label: "Mayer Multiple",    value: fmt(ind.mayerMultiple) + "x" },
+    { label: "Mayer Multiple 7d", value: fmt(ind.mayerMultiple7d) + "x" },
     { label: "200 WMA",       value: fmtPrice(ind.ma200w) },
     { label: "1458 SMA",      value: fmtPrice(ind.sma1458) },
     { label: "Price/1458 SMA",value: fmt(ind.priceVs1458) + "x" },
