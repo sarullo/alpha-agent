@@ -1,9 +1,9 @@
 name: Stock Agent — Daily
 
 on:
-  schedule:
-    # 9:30am ET = 1:30pm UTC (weekdays)
-    - cron: '30 13 * * 1-5'
+  # schedule:
+  #   # 9:30am ET = 1:30pm UTC (weekdays)
+  #   - cron: '30 13 * * 1-5'
   workflow_dispatch: # allows manual trigger from GitHub UI
 
 jobs:
